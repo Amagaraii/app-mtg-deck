@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from "react";
 import {
   View,
   Text,
@@ -7,11 +7,15 @@ import {
   ActivityIndicator,
   StyleSheet,
   SafeAreaView,
-} from 'react-native';
+  Animated,
+  useColorScheme,
+} from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
 
 type CommanderCard = {
   name: string;
   type_line: string;
+  color_identity?: string[];
   image_uris?: {
     normal: string;
   };
@@ -22,17 +26,23 @@ export default function HomeScreen() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const scaleAnim = useRef(new Animated.Value(0.8)).current;
+
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === "dark";
+
   const getRandomCommander = async () => {
     try {
       setLoading(true);
       setError(null);
 
       const response = await fetch(
-        'https://api.scryfall.com/cards/random?q=is:commander'
+        "https://api.scryfall.com/cards/random?q=is:commander"
       );
 
       if (!response.ok) {
-        throw new Error('Erreur API');
+        throw new Error("Erreur API");
       }
 
       const data = await response.json();
@@ -40,96 +50,160 @@ export default function HomeScreen() {
       setCard({
         name: data.name,
         type_line: data.type_line,
+        color_identity: data.color_identity,
         image_uris: data.image_uris,
       });
     } catch {
-      setError('Impossible de tirer un commandant');
+      setError("Impossible de tirer un commandant");
     } finally {
       setLoading(false);
     }
   };
 
+  useEffect(() => {
+    if (card) {
+      Animated.parallel([
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: 500,
+          useNativeDriver: true,
+        }),
+        Animated.spring(scaleAnim, {
+          toValue: 1,
+          friction: 5,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    } else {
+      fadeAnim.setValue(0);
+      scaleAnim.setValue(0.8);
+    }
+  }, [card]);
+
+  const getColors = (colors?: string[]): [string, string, ...string[]] => {
+    if (!colors || colors.length === 0) return ["#f6f4ff", "#e0d7ff"];
+    const map: Record<string, string> = {
+      W: "#fef9e7",
+      U: "#d0e8ff",
+      B: "#d3d3d3",
+      R: "#ffd6d6",
+      G: "#d6ffd6",
+    };
+    const mappedColors = colors.map((c) => map[c]);
+    return mappedColors as [string, string, ...string[]];
+  };
+
   return (
-    <SafeAreaView style={styles.safe}>
-      <View style={styles.container}>
-        <Text style={styles.title}>✨ Random Commander ✨</Text>
-        <Text style={styles.subtitle}>
-          Découvre un commandant au hasard
-        </Text>
+    <LinearGradient
+      colors={card ? getColors(card.color_identity) : ["#f6f4ff", "#e0d7ff"]}
+      style={styles.safe}
+    >
+      <SafeAreaView style={styles.safe}>
+        <View style={styles.container}>
+          <Text style={[styles.title, { color: isDark ? "#fff" : "#3d348b" }]}>
+            ✨ Random Commander ✨
+          </Text>
+          <Text style={[styles.subtitle, { color: isDark ? "#ccc" : "#6d6875" }]}>
+            Découvre un commandant au hasard
+          </Text>
 
-        <Pressable style={styles.button} onPress={getRandomCommander}>
-          <Text style={styles.buttonText}>Tirer un commandant</Text>
-        </Pressable>
+          <Pressable style={styles.button} onPress={getRandomCommander}>
+            <Text style={styles.buttonText}>Tirer un commandant</Text>
+          </Pressable>
 
-        {loading && (
-          <ActivityIndicator size="large" color="#6b5cff" style={{ marginTop: 30 }} />
-        )}
+          {loading && (
+            <ActivityIndicator
+              size="large"
+              color="#6b5cff"
+              style={{ marginTop: 30 }}
+            />
+          )}
 
-        {error && <Text style={styles.error}>{error}</Text>}
+          {error && <Text style={styles.error}>{error}</Text>}
 
-        {card && (
-          <View style={styles.card}>
-            <Text style={styles.cardName}>{card.name}</Text>
-            <Text style={styles.cardType}>{card.type_line}</Text>
+          {card && (
+            <Animated.View
+              style={[
+                styles.card,
+                {
+                  opacity: fadeAnim,
+                  transform: [{ scale: scaleAnim }],
+                  backgroundColor: isDark ? "#1c1c1e" : "#ffffff",
+                },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.cardName,
+                  { color: isDark ? "#fff" : "#2b2d42" },
+                ]}
+              >
+                {card.name}
+              </Text>
+              <Text
+                style={[
+                  styles.cardType,
+                  { color: isDark ? "#ccc" : "#6c757d" },
+                ]}
+              >
+                {card.type_line}
+              </Text>
 
-            {card.image_uris?.normal && (
-              <Image
-                source={{ uri: card.image_uris.normal }}
-                style={styles.image}
-              />
-            )}
-          </View>
-        )}
-      </View>
-    </SafeAreaView>
+              {card.image_uris?.normal && (
+                <Image
+                  source={{ uri: card.image_uris.normal }}
+                  style={styles.image}
+                />
+              )}
+            </Animated.View>
+          )}
+        </View>
+      </SafeAreaView>
+    </LinearGradient>
   );
 }
 
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: '#f6f4ff',
   },
   container: {
     flex: 1,
-    alignItems: 'center',
+    alignItems: "center",
     padding: 20,
   },
   title: {
     fontSize: 26,
-    fontWeight: '700',
-    color: '#3d348b',
+    fontWeight: "700",
     marginTop: 20,
   },
   subtitle: {
     fontSize: 14,
-    color: '#6d6875',
     marginBottom: 30,
   },
   button: {
-    backgroundColor: '#5f5cff',
+    backgroundColor: "#5f5cff",
     paddingVertical: 14,
     paddingHorizontal: 30,
     borderRadius: 999,
-    shadowColor: '#000',
+    shadowColor: "#000",
     shadowOpacity: 0.15,
     shadowOffset: { width: 0, height: 4 },
     shadowRadius: 8,
     elevation: 4,
   },
   buttonText: {
-    color: '#fff',
+    color: "#fff",
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   card: {
     marginTop: 30,
-    backgroundColor: '#ffffff',
     borderRadius: 20,
     padding: 15,
-    alignItems: 'center',
-    width: '100%',
-    shadowColor: '#000',
+    alignItems: "center",
+    width: "100%",
+    shadowColor: "#000",
     shadowOpacity: 0.1,
     shadowOffset: { width: 0, height: 6 },
     shadowRadius: 12,
@@ -137,24 +211,22 @@ const styles = StyleSheet.create({
   },
   cardName: {
     fontSize: 20,
-    fontWeight: '700',
-    color: '#2b2d42',
-    textAlign: 'center',
+    fontWeight: "700",
+    textAlign: "center",
   },
   cardType: {
     fontSize: 13,
-    color: '#6c757d',
     marginBottom: 10,
-    textAlign: 'center',
+    textAlign: "center",
   },
   image: {
     width: 240,
     height: 340,
-    resizeMode: 'contain',
+    resizeMode: "contain",
     borderRadius: 12,
   },
   error: {
-    color: '#e63946',
+    color: "#e63946",
     marginTop: 20,
   },
 });
