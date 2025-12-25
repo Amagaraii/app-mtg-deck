@@ -2,10 +2,11 @@ import { useState } from 'react';
 import {
   View,
   Text,
-  Button,
+  Pressable,
   Image,
   ActivityIndicator,
   StyleSheet,
+  SafeAreaView,
 } from 'react-native';
 
 type CommanderCard = {
@@ -31,7 +32,7 @@ export default function HomeScreen() {
       );
 
       if (!response.ok) {
-        throw new Error('Erreur API Scryfall');
+        throw new Error('Erreur API');
       }
 
       const data = await response.json();
@@ -41,73 +42,119 @@ export default function HomeScreen() {
         type_line: data.type_line,
         image_uris: data.image_uris,
       });
-    } catch (err) {
-      setError('Impossible de récupérer un commandant');
+    } catch {
+      setError('Impossible de tirer un commandant');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Random Commander</Text>
+    <SafeAreaView style={styles.safe}>
+      <View style={styles.container}>
+        <Text style={styles.title}>✨ Random Commander ✨</Text>
+        <Text style={styles.subtitle}>
+          Découvre un commandant au hasard
+        </Text>
 
-      <Button title="Tirer un commandant" onPress={getRandomCommander} />
+        <Pressable style={styles.button} onPress={getRandomCommander}>
+          <Text style={styles.buttonText}>Tirer un commandant</Text>
+        </Pressable>
 
-      {loading && <ActivityIndicator size="large" style={{ marginTop: 20 }} />}
+        {loading && (
+          <ActivityIndicator size="large" color="#6b5cff" style={{ marginTop: 30 }} />
+        )}
 
-      {error && <Text style={styles.error}>{error}</Text>}
+        {error && <Text style={styles.error}>{error}</Text>}
 
-      {card && (
-        <View style={styles.card}>
-          <Text style={styles.cardName}>{card.name}</Text>
-          <Text style={styles.cardType}>{card.type_line}</Text>
+        {card && (
+          <View style={styles.card}>
+            <Text style={styles.cardName}>{card.name}</Text>
+            <Text style={styles.cardType}>{card.type_line}</Text>
 
-          {card.image_uris?.normal && (
-            <Image
-              source={{ uri: card.image_uris.normal }}
-              style={styles.image}
-            />
-          )}
-        </View>
-      )}
-    </View>
+            {card.image_uris?.normal && (
+              <Image
+                source={{ uri: card.image_uris.normal }}
+                style={styles.image}
+              />
+            )}
+          </View>
+        )}
+      </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  safe: {
+    flex: 1,
+    backgroundColor: '#f6f4ff',
+  },
   container: {
     flex: 1,
-    padding: 20,
     alignItems: 'center',
-    justifyContent: 'center',
+    padding: 20,
   },
   title: {
-    fontSize: 22,
-    marginBottom: 20,
-    fontWeight: 'bold',
+    fontSize: 26,
+    fontWeight: '700',
+    color: '#3d348b',
+    marginTop: 20,
+  },
+  subtitle: {
+    fontSize: 14,
+    color: '#6d6875',
+    marginBottom: 30,
+  },
+  button: {
+    backgroundColor: '#5f5cff',
+    paddingVertical: 14,
+    paddingHorizontal: 30,
+    borderRadius: 999,
+    shadowColor: '#000',
+    shadowOpacity: 0.15,
+    shadowOffset: { width: 0, height: 4 },
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  buttonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
   },
   card: {
-    marginTop: 20,
+    marginTop: 30,
+    backgroundColor: '#ffffff',
+    borderRadius: 20,
+    padding: 15,
     alignItems: 'center',
+    width: '100%',
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    shadowOffset: { width: 0, height: 6 },
+    shadowRadius: 12,
+    elevation: 5,
   },
   cardName: {
-    fontSize: 18,
-    fontWeight: 'bold',
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#2b2d42',
     textAlign: 'center',
   },
   cardType: {
-    fontSize: 14,
+    fontSize: 13,
+    color: '#6c757d',
     marginBottom: 10,
     textAlign: 'center',
   },
   image: {
-    width: 250,
-    height: 350,
+    width: 240,
+    height: 340,
     resizeMode: 'contain',
+    borderRadius: 12,
   },
   error: {
-    color: 'red',
-    marginTop: 10,
+    color: '#e63946',
+    marginTop: 20,
   },
 });
