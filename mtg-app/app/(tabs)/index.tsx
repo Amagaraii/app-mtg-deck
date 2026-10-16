@@ -2,33 +2,53 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useRef, useState } from "react";
 import {
   Animated,
-  Image,
   Pressable,
   SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
+  useWindowDimensions,
   View,
 } from "react-native";
 
+import CommanderCardView from "@/src/components/CommanderCardView";
 import { COLORS, DEFAULT_GRADIENT, MANA_FONT_MAP } from "@/src/constants/colors";
-import { getRandomCommander } from "@/src/services/scryfall";
+import { getPartner, getRandomCommander, Lang } from "@/src/services/scryfall";
 import { CommanderCard } from "@/src/types/commander";
-import { openEdhrec } from "@/src/utils/edhrec";
 import { getGradientColors } from "@/src/utils/gradient";
 
 type GradientColors = readonly [string, string, ...string[]];
 
+const TEXTS = {
+  fr: {
+    title: "✨ Commandant aléatoire ✨",
+    showFilters: "Afficher les filtres",
+    hideFilters: "Masquer les filtres",
+    draw: "Tirer un commandant",
+    language: "Langue : Français",
+  },
+  en: {
+    title: "✨ Random Commander ✨",
+    showFilters: "Show filters",
+    hideFilters: "Hide filters",
+    draw: "Draw a commander",
+    language: "Language: English",
+  },
+};
+
 export default function HomeScreen() {
   const [card, setCard] = useState<CommanderCard | null>(null);
+  const [partner, setPartner] = useState<CommanderCard | null>(null);
   const [selectedColors, setSelectedColors] = useState<string[]>([]);
   const [showFilters, setShowFilters] = useState(true);
-  const [isFlipped, setIsFlipped] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [lang, setLang] = useState<Lang>("fr");
+  const t = TEXTS[lang];
+  const { width: screenWidth } = useWindowDimensions();
+  const cardWidth = partner ? Math.min(240, (screenWidth - 60) / 2) : 240;
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(0.85)).current;
-  const flipAnim = useRef(new Animated.Value(0)).current;
 
   const toggleColor = (c: string) =>
     setSelectedColors((p) =>
@@ -38,11 +58,11 @@ export default function HomeScreen() {
   const handleGetRandomCommander = async () => {
     try {
       setLoading(true);
-      setIsFlipped(false);
-      flipAnim.setValue(0);
 
-      const data = await getRandomCommander(selectedColors);
+      const data = await getRandomCommander(selectedColors, lang);
+      const partnerCard = await getPartner(data, lang);
       setCard(data);
+      setPartner(partnerCard);
 
       fadeAnim.setValue(0);
       scaleAnim.setValue(0.85);
@@ -59,44 +79,32 @@ export default function HomeScreen() {
           useNativeDriver: true,
         }),
       ]).start();
+    } catch (e) {
+      console.error(e);
     } finally {
       setLoading(false);
     }
   };
 
-  const flipCard = () => {
-    Animated.timing(flipAnim, {
-      toValue: isFlipped ? 0 : 1,
-      duration: 400,
-      useNativeDriver: true,
-    }).start(() => setIsFlipped(!isFlipped));
-  };
-
-  const frontRotate = flipAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: ["0deg", "180deg"],
-  });
-
-  const backRotate = flipAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: ["180deg", "360deg"],
-  });
-
   const gradient: GradientColors = card
     ? getGradientColors(card.color_identity)
     : DEFAULT_GRADIENT;
-
-  const isDoubleFaced = card?.card_faces?.length === 2;
 
   return (
     <LinearGradient colors={gradient} style={{ flex: 1 }}>
       <SafeAreaView style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={styles.container}>
-          <Text style={styles.title}>✨ Random Commander ✨</Text>
+          <Text style={styles.title}>{t.title}</Text>
 
           <GradientButton
             colors={gradient}
-            label={showFilters ? "Masquer les filtres" : "Afficher les filtres"}
+            label={t.language}
+            onPress={() => setLang((l) => (l === "fr" ? "en" : "fr"))}
+          />
+
+          <GradientButton
+            colors={gradient}
+            label={showFilters ? t.hideFilters : t.showFilters}
             onPress={() => setShowFilters((p) => !p)}
           />
 
@@ -108,9 +116,7 @@ export default function HomeScreen() {
                   colors={getGradientColors([c])}
                   style={[
                     styles.colorButton,
-                    {
-                      borderWidth: selectedColors.includes(c) ? 2 : 1,
-                    },
+                    { borderWidth: selectedColors.includes(c) ? 2 : 1 },
                   ]}
                 >
                   <Pressable
@@ -126,61 +132,27 @@ export default function HomeScreen() {
 
           <GradientButton
             colors={gradient}
-            label="Tirer un commandant"
+            label={t.draw}
             onPress={handleGetRandomCommander}
             disabled={loading}
           />
 
           {card && (
-            <Pressable onPress={() => openEdhrec(card)}>
-              <Animated.View
-                style={[
-                  styles.cardWrapper,
-                  { opacity: fadeAnim, transform: [{ scale: scaleAnim }] },
-                ]}
-              >
-                <View style={styles.flipContainer}>
-                  <Animated.View
-                    style={[
-                      styles.cardFace,
-                      { transform: [{ rotateY: frontRotate }] },
-                    ]}
-                  >
-                    <Image
-                      source={{
-                        uri:
-                          card.image_uris?.normal ??
-                          card.card_faces?.[0]?.image_uris?.normal,
-                      }}
-                      style={styles.image}
-                    />
-                  </Animated.View>
-
-                  {isDoubleFaced && (
-                    <Animated.View
-                      style={[
-                        styles.cardFace,
-                        styles.cardBack,
-                        { transform: [{ rotateY: backRotate }] },
-                      ]}
-                    >
-                      <Image
-                        source={{
-                          uri: card.card_faces?.[1]?.image_uris?.normal,
-                        }}
-                        style={styles.image}
-                      />
-                    </Animated.View>
-                  )}
-                </View>
-
-                {isDoubleFaced && (
-                  <Pressable style={styles.flipButton} onPress={flipCard}>
-                    <Text style={styles.flipText}>↺</Text>
-                  </Pressable>
-                )}
-              </Animated.View>
-            </Pressable>
+            <Animated.View
+              style={[
+                styles.cardsRow,
+                { opacity: fadeAnim, transform: [{ scale: scaleAnim }] },
+              ]}
+            >
+              <CommanderCardView key={card.id} card={card} width={cardWidth} />
+              {partner && (
+                <CommanderCardView
+                  key={partner.id}
+                  card={partner}
+                  width={cardWidth}
+                />
+              )}
+            </Animated.View>
           )}
         </ScrollView>
       </SafeAreaView>
@@ -237,27 +209,10 @@ const styles = StyleSheet.create({
   colorPressable: { flex: 1, justifyContent: "center", alignItems: "center" },
   manaIcon: { fontFamily: "Mana", fontSize: 32, color: "#111" },
 
-  cardWrapper: { marginTop: 30, alignItems: "center" },
-
-  flipContainer: { width: 240, height: 340 },
-  cardFace: {
-    position: "absolute",
-    width: "100%",
-    height: "100%",
-    backfaceVisibility: "hidden",
-  },
-  cardBack: { transform: [{ rotateY: "180deg" }] },
-
-  image: { width: "100%", height: "100%", resizeMode: "contain", borderRadius: 16 },
-
-  flipButton: {
-    marginTop: 10,
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "#000",
+  cardsRow: {
+    marginTop: 30,
+    flexDirection: "row",
     justifyContent: "center",
-    alignItems: "center",
+    gap: 12,
   },
-  flipText: { color: "#fff", fontSize: 18 },
 });
