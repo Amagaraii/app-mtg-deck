@@ -159,3 +159,28 @@ export const getPartner = async (
   if (!partner || partner.name === card.name) return null;
   return partner;
 };
+
+// Recherche par nom (commandants et Backgrounds), FR ou EN
+export const searchCards = async (text: string): Promise<CommanderCard[]> => {
+  const clean = text.replace(/["()]/g, "").trim();
+  if (!clean) return [];
+
+  const q = `${clean} (is:commander OR type:background) lang:any`;
+  const res = await scryfallFetch(
+    `https://api.scryfall.com/cards/search?q=${encodeURIComponent(q)}&unique=cards`
+  );
+  if (!res.ok) return [];
+
+  const json = await res.json();
+  return (json.data ?? []).slice(0, 20);
+};
+
+// Récupère la fiche complète d'une carte à partir de son nom anglais
+export const getCardByName = async (
+  name: string
+): Promise<CommanderCard | null> => {
+  const res = await scryfallFetch(
+    `https://api.scryfall.com/cards/named?exact=${encodeURIComponent(name)}`
+  );
+  return res.ok ? await res.json() : null;
+};

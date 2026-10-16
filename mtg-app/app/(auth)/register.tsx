@@ -30,6 +30,8 @@ export default function RegisterScreen() {
         value={email}
         onChangeText={setEmail}
         style={styles.input}
+        autoCapitalize="none"
+        keyboardType="email-address"
       />
       <TextInput
         placeholder="Mot de passe"

@@ -26,14 +26,21 @@ function RootLayout() {
 
   return (
     <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
-      <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: "#fff" } }}>
-        {user ? (
-          // connecté → onglets
+      <Stack
+        screenOptions={{
+          headerShown: false,
+          contentStyle: { backgroundColor: "#fff" },
+        }}
+      >
+        {/* Connecté : les onglets */}
+        <Stack.Protected guard={!!user}>
           <Stack.Screen name="(tabs)" />
-        ) : (
-          // pas connecté → login
-          <Stack.Screen name="(auth)/login" />
-        )}
+        </Stack.Protected>
+
+        {/* Pas connecté : login et register */}
+        <Stack.Protected guard={!user}>
+          <Stack.Screen name="(auth)" />
+        </Stack.Protected>
       </Stack>
       <StatusBar barStyle="dark-content" />
     </ThemeProvider>

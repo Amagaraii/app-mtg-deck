@@ -7,9 +7,15 @@ import { openEdhrec } from "@/src/utils/edhrec";
 export default function CommanderCardView({
   card,
   width = 240,
+  actionLabel,
+  active = false,
+  onAction,
 }: {
   card: CommanderCard;
   width?: number;
+  actionLabel?: string;
+  active?: boolean;
+  onAction?: () => void;
 }) {
   const [isFlipped, setIsFlipped] = useState(false);
   const flipAnim = useRef(new Animated.Value(0)).current;
@@ -68,6 +74,17 @@ export default function CommanderCardView({
           <Text style={styles.flipText}>↺</Text>
         </Pressable>
       )}
+
+      {actionLabel && onAction && (
+        <Pressable
+          onPress={onAction}
+          style={[styles.actionButton, active && styles.actionActive]}
+        >
+          <Text style={[styles.actionText, active && styles.actionTextActive]}>
+            {actionLabel}
+          </Text>
+        </Pressable>
+      )}
     </View>
   );
 }
@@ -91,4 +108,16 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   flipText: { color: "#fff", fontSize: 18 },
+  actionButton: {
+    marginTop: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 999,
+    borderWidth: 1.5,
+    borderColor: "#111",
+    backgroundColor: "rgba(255,255,255,0.55)",
+  },
+  actionActive: { backgroundColor: "#111" },
+  actionText: { fontSize: 13, fontWeight: "700", color: "#111" },
+  actionTextActive: { color: "#fff" },
 });

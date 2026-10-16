@@ -4,11 +4,25 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 const USERS_KEY = "USERS";
 const SESSION_KEY = "SESSION";
 
-export async function register(email: string, password: string) {
+const normalizeEmail = (email: string) => email.trim().toLowerCase();
+
+function validate(email: string, password: string) {
+  if (!email) throw new Error("Email requis");
+  if (!/^\S+@\S+\.\S+$/.test(email)) throw new Error("Email invalide");
+  if (!password) throw new Error("Mot de passe requis");
+}
+
+export async function register(rawEmail: string, password: string) {
+  const email = normalizeEmail(rawEmail);
+  validate(email, password);
+  if (password.length < 6) {
+    throw new Error("Le mot de passe doit faire au moins 6 caractères");
+  }
+
   const raw = await AsyncStorage.getItem(USERS_KEY);
   const users: User[] = raw ? JSON.parse(raw) : [];
 
-  if (users.find(u => u.email === email)) {
+  if (users.find((u) => u.email.toLowerCase() === email)) {
     throw new Error("Email déjà utilisé");
   }
 
@@ -25,11 +39,16 @@ export async function register(email: string, password: string) {
   return newUser;
 }
 
-export async function login(email: string, password: string) {
+export async function login(rawEmail: string, password: string) {
+  const email = normalizeEmail(rawEmail);
+  validate(email, password);
+
   const raw = await AsyncStorage.getItem(USERS_KEY);
   const users: User[] = raw ? JSON.parse(raw) : [];
 
-  const user = users.find(u => u.email === email && u.password === password);
+  const user = users.find(
+    (u) => u.email.toLowerCase() === email && u.password === password
+  );
   if (!user) throw new Error("Identifiants invalides");
 
   await AsyncStorage.setItem(SESSION_KEY, JSON.stringify(user));

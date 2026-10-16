@@ -15,7 +15,14 @@ import {
 
 import CommanderCardView from "@/src/components/CommanderCardView";
 import { COLORS, DEFAULT_GRADIENT, MANA_FONT_MAP } from "@/src/constants/colors";
-import { getPartner, getRandomCommander, Lang } from "@/src/services/scryfall";
+import { useAuth } from "@/src/context/AuthContext";
+import { getCollection } from "@/src/services/collection";
+import {
+  getCardByName,
+  getPartner,
+  getRandomCommander,
+  Lang,
+} from "@/src/services/scryfall";
 import { CommanderCard } from "@/src/types/commander";
 import { getGradientColors } from "@/src/utils/gradient";
 
@@ -25,28 +32,40 @@ const TEXTS = {
   fr: {
     title: "Commandant aléatoire",
     subtitle: "Tire ton prochain commandant au hasard",
-    settings: "Réglages",
+    collectionOnly: "Ma collection uniquement",
+    collectionHint: "Tirer parmi les cartes que tu possèdes",
     duosOnly: "Uniquement les duos",
     duosHint: "Commandants avec un partenaire imposé",
+    duosDisabled: "Indisponible avec ta collection",
     colors: "Couleurs",
     clear: "Effacer",
     draw: "Tirer un commandant",
     noResult: "Aucun commandant trouvé avec ces filtres.",
+    emptyCollection: "Ta collection est vide.",
+    noMatchCollection: "Aucune carte de ta collection ne correspond à ces couleurs.",
   },
   en: {
     title: "Random Commander",
     subtitle: "Draw your next commander at random",
-    settings: "Settings",
+    collectionOnly: "My collection only",
+    collectionHint: "Draw from the cards you own",
     duosOnly: "Partner pairs only",
     duosHint: "Commanders with a fixed partner",
+    duosDisabled: "Unavailable with your collection",
     colors: "Colors",
     clear: "Clear",
     draw: "Draw a commander",
     noResult: "No commander found with these filters.",
+    emptyCollection: "Your collection is empty.",
+    noMatchCollection: "No card in your collection matches these colors.",
   },
 };
 
+const sameColors = (a: string[], b: string[]) =>
+  [...a].sort().join("") === [...b].sort().join("");
+
 export default function HomeScreen() {
+  const { user } = useAuth();
   const [card, setCard] = useState<CommanderCard | null>(null);
   const [partner, setPartner] = useState<CommanderCard | null>(null);
   const [selectedColors, setSelectedColors] = useState<string[]>([]);
@@ -54,7 +73,8 @@ export default function HomeScreen() {
   const [loading, setLoading] = useState(false);
   const [lang, setLang] = useState<Lang>("fr");
   const [partnerOnly, setPartnerOnly] = useState(false);
-  const [error, setError] = useState(false);
+  const [collectionOnly, setCollectionOnly] = useState(false);
+  const [errorMsg, setErrorMsg] = useState("");
   const t = TEXTS[lang];
   const { width: screenWidth } = useWindowDimensions();
   const cardWidth = partner ? Math.min(240, (screenWidth - 60) / 2) : 240;
@@ -70,11 +90,38 @@ export default function HomeScreen() {
   const handleGetRandomCommander = async () => {
     try {
       setLoading(true);
-      setError(false);
+      setErrorMsg("");
 
-      const data = await getRandomCommander(selectedColors, lang, partnerOnly);
-      const partnerCard = await getPartner(data, lang);
-      setCard(data);
+      let shown: CommanderCard;
+      let full: CommanderCard;
+
+      if (collectionOnly) {
+        if (!user) return;
+        const all = await getCollection(user.id);
+        if (all.length === 0) {
+          setErrorMsg(t.emptyCollection);
+          return;
+        }
+        const pool = selectedColors.length
+          ? all.filter((c) => sameColors(c.color_identity ?? [], selectedColors))
+          : all;
+        if (pool.length === 0) {
+          setErrorMsg(t.noMatchCollection);
+          return;
+        }
+        shown = pool[Math.floor(Math.random() * pool.length)];
+        // Anciennes cartes sans mots-clés : on récupère la fiche complète
+        full =
+          shown.keywords !== undefined
+            ? shown
+            : (await getCardByName(shown.name)) ?? shown;
+      } else {
+        shown = await getRandomCommander(selectedColors, lang, partnerOnly);
+        full = shown;
+      }
+
+      const partnerCard = await getPartner(full, lang);
+      setCard(shown);
       setPartner(partnerCard);
 
       fadeAnim.setValue(0);
@@ -94,7 +141,7 @@ export default function HomeScreen() {
       ]).start();
     } catch (e) {
       console.error(e);
-      setError(true);
+      setErrorMsg(t.noResult);
     } finally {
       setLoading(false);
     }
@@ -133,12 +180,30 @@ export default function HomeScreen() {
           <View style={styles.panel}>
             <View style={styles.row}>
               <View style={{ flex: 1, paddingRight: 12 }}>
-                <Text style={styles.label}>{t.duosOnly}</Text>
-                <Text style={styles.hint}>{t.duosHint}</Text>
+                <Text style={styles.label}>{t.collectionOnly}</Text>
+                <Text style={styles.hint}>{t.collectionHint}</Text>
               </View>
               <Switch
-                value={partnerOnly}
+                value={collectionOnly}
+                onValueChange={setCollectionOnly}
+                trackColor={{ false: "rgba(0,0,0,0.25)", true: "#111" }}
+                thumbColor="#fff"
+              />
+            </View>
+
+            <View style={styles.divider} />
+
+            <View style={[styles.row, collectionOnly && { opacity: 0.45 }]}>
+              <View style={{ flex: 1, paddingRight: 12 }}>
+                <Text style={styles.label}>{t.duosOnly}</Text>
+                <Text style={styles.hint}>
+                  {collectionOnly ? t.duosDisabled : t.duosHint}
+                </Text>
+              </View>
+              <Switch
+                value={partnerOnly && !collectionOnly}
                 onValueChange={setPartnerOnly}
+                disabled={collectionOnly}
                 trackColor={{ false: "rgba(0,0,0,0.25)", true: "#111" }}
                 thumbColor="#fff"
               />
@@ -200,7 +265,7 @@ export default function HomeScreen() {
             )}
           </Pressable>
 
-          {error && <Text style={styles.errorText}>{t.noResult}</Text>}
+          {errorMsg !== "" && <Text style={styles.errorText}>{errorMsg}</Text>}
 
           {/* Cartes */}
           {card && (
@@ -210,10 +275,14 @@ export default function HomeScreen() {
                 { opacity: fadeAnim, transform: [{ scale: scaleAnim }] },
               ]}
             >
-              <CommanderCardView key={card.id} card={card} width={cardWidth} />
+              <CommanderCardView
+                key={`main-${card.id}`}
+                card={card}
+                width={cardWidth}
+              />
               {partner && (
                 <CommanderCardView
-                  key={partner.id}
+                  key={`partner-${partner.id}`}
                   card={partner}
                   width={cardWidth}
                 />
@@ -229,7 +298,6 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: { alignItems: "center", padding: 20, paddingBottom: 50 },
 
-  // En-tête
   header: { width: "100%", maxWidth: 420, alignItems: "center", marginTop: 10 },
   langSwitch: {
     alignSelf: "flex-end",
@@ -259,7 +327,6 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
 
-  // Panneau
   panel: {
     width: "100%",
     maxWidth: 420,
@@ -281,7 +348,6 @@ const styles = StyleSheet.create({
   clearText: { fontSize: 13, fontWeight: "600", color: "#7a0000" },
   chevron: { fontSize: 12, color: "#111" },
 
-  // Boutons de mana
   colorFilter: {
     flexDirection: "row",
     justifyContent: "center",
@@ -295,7 +361,6 @@ const styles = StyleSheet.create({
   colorPressable: { flex: 1, justifyContent: "center", alignItems: "center" },
   manaIcon: { fontFamily: "Mana", fontSize: 28, color: "#111" },
 
-  // Bouton de tirage
   drawButton: {
     width: "100%",
     maxWidth: 420,
@@ -304,21 +369,16 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     backgroundColor: "#111",
     alignItems: "center",
-    shadowColor: "#000",
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 5,
   },
   drawText: { color: "#fff", fontSize: 17, fontWeight: "700" },
 
   errorText: { marginTop: 16, fontSize: 15, color: "#7a0000", textAlign: "center" },
 
-  // Cartes
   cardsRow: {
     marginTop: 28,
     flexDirection: "row",
     justifyContent: "center",
+    alignItems: "flex-start",
     gap: 12,
   },
 });
