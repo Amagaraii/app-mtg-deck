@@ -1,11 +1,13 @@
 import { LinearGradient } from "expo-linear-gradient";
 import { useRef, useState } from "react";
 import {
+  ActivityIndicator,
   Animated,
   Pressable,
   SafeAreaView,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   useWindowDimensions,
   View,
@@ -21,18 +23,26 @@ type GradientColors = readonly [string, string, ...string[]];
 
 const TEXTS = {
   fr: {
-    title: "✨ Commandant aléatoire ✨",
-    showFilters: "Afficher les filtres",
-    hideFilters: "Masquer les filtres",
+    title: "Commandant aléatoire",
+    subtitle: "Tire ton prochain commandant au hasard",
+    settings: "Réglages",
+    duosOnly: "Uniquement les duos",
+    duosHint: "Commandants avec un partenaire imposé",
+    colors: "Couleurs",
+    clear: "Effacer",
     draw: "Tirer un commandant",
-    language: "Langue : Français",
+    noResult: "Aucun commandant trouvé avec ces filtres.",
   },
   en: {
-    title: "✨ Random Commander ✨",
-    showFilters: "Show filters",
-    hideFilters: "Hide filters",
+    title: "Random Commander",
+    subtitle: "Draw your next commander at random",
+    settings: "Settings",
+    duosOnly: "Partner pairs only",
+    duosHint: "Commanders with a fixed partner",
+    colors: "Colors",
+    clear: "Clear",
     draw: "Draw a commander",
-    language: "Language: English",
+    noResult: "No commander found with these filters.",
   },
 };
 
@@ -43,6 +53,8 @@ export default function HomeScreen() {
   const [showFilters, setShowFilters] = useState(true);
   const [loading, setLoading] = useState(false);
   const [lang, setLang] = useState<Lang>("fr");
+  const [partnerOnly, setPartnerOnly] = useState(false);
+  const [error, setError] = useState(false);
   const t = TEXTS[lang];
   const { width: screenWidth } = useWindowDimensions();
   const cardWidth = partner ? Math.min(240, (screenWidth - 60) / 2) : 240;
@@ -58,8 +70,9 @@ export default function HomeScreen() {
   const handleGetRandomCommander = async () => {
     try {
       setLoading(true);
+      setError(false);
 
-      const data = await getRandomCommander(selectedColors, lang);
+      const data = await getRandomCommander(selectedColors, lang, partnerOnly);
       const partnerCard = await getPartner(data, lang);
       setCard(data);
       setPartner(partnerCard);
@@ -81,6 +94,7 @@ export default function HomeScreen() {
       ]).start();
     } catch (e) {
       console.error(e);
+      setError(true);
     } finally {
       setLoading(false);
     }
@@ -94,49 +108,101 @@ export default function HomeScreen() {
     <LinearGradient colors={gradient} style={{ flex: 1 }}>
       <SafeAreaView style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={styles.container}>
-          <Text style={styles.title}>{t.title}</Text>
-
-          <GradientButton
-            colors={gradient}
-            label={t.language}
-            onPress={() => setLang((l) => (l === "fr" ? "en" : "fr"))}
-          />
-
-          <GradientButton
-            colors={gradient}
-            label={showFilters ? t.hideFilters : t.showFilters}
-            onPress={() => setShowFilters((p) => !p)}
-          />
-
-          {showFilters && (
-            <View style={styles.colorFilter}>
-              {COLORS.map((c) => (
-                <LinearGradient
-                  key={c}
-                  colors={getGradientColors([c])}
-                  style={[
-                    styles.colorButton,
-                    { borderWidth: selectedColors.includes(c) ? 2 : 1 },
-                  ]}
+          {/* En-tête */}
+          <View style={styles.header}>
+            <View style={styles.langSwitch}>
+              {(["fr", "en"] as Lang[]).map((l) => (
+                <Pressable
+                  key={l}
+                  onPress={() => setLang(l)}
+                  style={[styles.langOption, lang === l && styles.langActive]}
                 >
-                  <Pressable
-                    style={styles.colorPressable}
-                    onPress={() => toggleColor(c)}
+                  <Text
+                    style={[styles.langText, lang === l && styles.langTextActive]}
                   >
-                    <Text style={styles.manaIcon}>{MANA_FONT_MAP[c]}</Text>
-                  </Pressable>
-                </LinearGradient>
+                    {l.toUpperCase()}
+                  </Text>
+                </Pressable>
               ))}
             </View>
-          )}
+            <Text style={styles.title}>{t.title}</Text>
+            <Text style={styles.subtitle}>{t.subtitle}</Text>
+          </View>
 
-          <GradientButton
-            colors={gradient}
-            label={t.draw}
+          {/* Panneau de réglages */}
+          <View style={styles.panel}>
+            <View style={styles.row}>
+              <View style={{ flex: 1, paddingRight: 12 }}>
+                <Text style={styles.label}>{t.duosOnly}</Text>
+                <Text style={styles.hint}>{t.duosHint}</Text>
+              </View>
+              <Switch
+                value={partnerOnly}
+                onValueChange={setPartnerOnly}
+                trackColor={{ false: "rgba(0,0,0,0.25)", true: "#111" }}
+                thumbColor="#fff"
+              />
+            </View>
+
+            <View style={styles.divider} />
+
+            <Pressable
+              style={styles.row}
+              onPress={() => setShowFilters((p) => !p)}
+            >
+              <Text style={styles.label}>{t.colors}</Text>
+              <View style={styles.rowRight}>
+                {selectedColors.length > 0 && (
+                  <Pressable onPress={() => setSelectedColors([])}>
+                    <Text style={styles.clearText}>{t.clear}</Text>
+                  </Pressable>
+                )}
+                <Text style={styles.chevron}>{showFilters ? "▲" : "▼"}</Text>
+              </View>
+            </Pressable>
+
+            {showFilters && (
+              <View style={styles.colorFilter}>
+                {COLORS.map((c) => {
+                  const selected = selectedColors.includes(c);
+                  return (
+                    <LinearGradient
+                      key={c}
+                      colors={getGradientColors([c])}
+                      style={[
+                        styles.colorButton,
+                        selected ? styles.colorSelected : styles.colorUnselected,
+                      ]}
+                    >
+                      <Pressable
+                        style={styles.colorPressable}
+                        onPress={() => toggleColor(c)}
+                      >
+                        <Text style={styles.manaIcon}>{MANA_FONT_MAP[c]}</Text>
+                      </Pressable>
+                    </LinearGradient>
+                  );
+                })}
+              </View>
+            )}
+          </View>
+
+          {/* Bouton de tirage */}
+          <Pressable
             onPress={handleGetRandomCommander}
             disabled={loading}
-          />
+            style={[styles.drawButton, loading && { opacity: 0.7 }]}
+          >
+            {loading ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.drawText}>{t.draw}</Text>
+            )}
+          </Pressable>
 
+          {error && <Text style={styles.errorText}>{t.noResult}</Text>}
+
+          {/* Cartes */}
           {card && (
             <Animated.View
               style={[
@@ -160,57 +226,97 @@ export default function HomeScreen() {
   );
 }
 
-function GradientButton({
-  colors,
-  label,
-  onPress,
-  disabled,
-}: {
-  colors: GradientColors;
-  label: string;
-  onPress: () => void;
-  disabled?: boolean;
-}) {
-  return (
-    <LinearGradient colors={colors} style={styles.bigButton}>
-      <Pressable
-        onPress={onPress}
-        disabled={disabled}
-        style={styles.bigButtonPressable}
-      >
-        <Text style={styles.buttonText}>{label}</Text>
-      </Pressable>
-    </LinearGradient>
-  );
-}
-
 const styles = StyleSheet.create({
-  container: { alignItems: "center", padding: 20 },
-  title: { fontSize: 26, fontWeight: "700", color: "#111", marginTop: 20 },
+  container: { alignItems: "center", padding: 20, paddingBottom: 50 },
 
-  bigButton: {
+  // En-tête
+  header: { width: "100%", maxWidth: 420, alignItems: "center", marginTop: 10 },
+  langSwitch: {
+    alignSelf: "flex-end",
+    flexDirection: "row",
+    backgroundColor: "rgba(255,255,255,0.45)",
     borderRadius: 999,
+    padding: 3,
     borderWidth: 1,
-    borderColor: "#000",
-    width: 220,
-    marginTop: 10,
+    borderColor: "rgba(0,0,0,0.12)",
   },
-  bigButtonPressable: { paddingVertical: 14, alignItems: "center" },
-  buttonText: { fontSize: 16, fontWeight: "600", color: "#111" },
+  langOption: { paddingVertical: 6, paddingHorizontal: 14, borderRadius: 999 },
+  langActive: { backgroundColor: "#111" },
+  langText: { fontSize: 13, fontWeight: "700", color: "#111" },
+  langTextActive: { color: "#fff" },
+  title: {
+    fontSize: 30,
+    fontWeight: "800",
+    color: "#111",
+    marginTop: 12,
+    textAlign: "center",
+  },
+  subtitle: {
+    fontSize: 14,
+    color: "rgba(0,0,0,0.65)",
+    marginTop: 4,
+    marginBottom: 18,
+    textAlign: "center",
+  },
 
-  colorFilter: { flexDirection: "row", flexWrap: "wrap" },
-  colorButton: {
-    width: 60,
-    height: 60,
-    margin: 6,
-    borderRadius: 12,
-    borderColor: "#000",
+  // Panneau
+  panel: {
+    width: "100%",
+    maxWidth: 420,
+    backgroundColor: "rgba(255,255,255,0.55)",
+    borderRadius: 20,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: "rgba(0,0,0,0.08)",
   },
+  row: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  rowRight: { flexDirection: "row", alignItems: "center", gap: 14 },
+  label: { fontSize: 16, fontWeight: "700", color: "#111" },
+  hint: { fontSize: 12, color: "rgba(0,0,0,0.6)", marginTop: 2 },
+  divider: {
+    height: 1,
+    backgroundColor: "rgba(0,0,0,0.1)",
+    marginVertical: 14,
+  },
+  clearText: { fontSize: 13, fontWeight: "600", color: "#7a0000" },
+  chevron: { fontSize: 12, color: "#111" },
+
+  // Boutons de mana
+  colorFilter: {
+    flexDirection: "row",
+    justifyContent: "center",
+    flexWrap: "wrap",
+    gap: 12,
+    marginTop: 16,
+  },
+  colorButton: { width: 54, height: 54, borderRadius: 27, borderColor: "#111" },
+  colorSelected: { borderWidth: 3, transform: [{ scale: 1.12 }], opacity: 1 },
+  colorUnselected: { borderWidth: 1, opacity: 0.55 },
   colorPressable: { flex: 1, justifyContent: "center", alignItems: "center" },
-  manaIcon: { fontFamily: "Mana", fontSize: 32, color: "#111" },
+  manaIcon: { fontFamily: "Mana", fontSize: 28, color: "#111" },
 
+  // Bouton de tirage
+  drawButton: {
+    width: "100%",
+    maxWidth: 420,
+    marginTop: 18,
+    paddingVertical: 16,
+    borderRadius: 999,
+    backgroundColor: "#111",
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 5,
+  },
+  drawText: { color: "#fff", fontSize: 17, fontWeight: "700" },
+
+  errorText: { marginTop: 16, fontSize: 15, color: "#7a0000", textAlign: "center" },
+
+  // Cartes
   cardsRow: {
-    marginTop: 30,
+    marginTop: 28,
     flexDirection: "row",
     justifyContent: "center",
     gap: 12,
