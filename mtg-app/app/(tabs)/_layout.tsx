@@ -24,6 +24,13 @@ export default function TabLayout() {
           tabBarIcon: () => <Text style={{ fontSize: 20 }}>📚</Text>,
         }}
       />
+      <Tabs.Screen
+        name="decks"
+        options={{
+          title: "Decks",
+          tabBarIcon: () => <Text style={{ fontSize: 20 }}>🃏</Text>,
+        }}
+      />
     </Tabs>
   );
 }

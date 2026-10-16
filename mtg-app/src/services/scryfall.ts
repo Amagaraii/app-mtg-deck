@@ -6,23 +6,30 @@ let lastCall = 0;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 // Toutes les requêtes passent par ici : espacement + nouvel essai
-const scryfallFetch = async (url: string, retries = 1): Promise<Response> => {
+const scryfallFetch = async (
+  url: string,
+  retries = 1,
+  init?: RequestInit,
+): Promise<Response> => {
   const wait = Math.max(0, lastCall + 150 - Date.now());
   if (wait) await sleep(wait);
   lastCall = Date.now();
 
   try {
-    const res = await fetch(url, { headers: { Accept: "application/json" } });
+    const res = await fetch(url, {
+      ...init,
+      headers: { Accept: "application/json", ...(init?.headers ?? {}) },
+    });
     if (res.status === 429 && retries > 0) {
-      await sleep(1500);
-      return scryfallFetch(url, retries - 1);
+      await sleep(3000);
+      return scryfallFetch(url, retries - 1, init);
     }
     return res;
   } catch (e) {
     // Sur le web, un 429 arrive ici comme une erreur réseau
     if (retries > 0) {
-      await sleep(1500);
-      return scryfallFetch(url, retries - 1);
+      await sleep(3000);
+      return scryfallFetch(url, retries - 1, init);
     }
     throw e;
   }
@@ -31,7 +38,7 @@ const scryfallFetch = async (url: string, retries = 1): Promise<Response> => {
 export const buildQuery = (
   colors: string[],
   lang: Lang = "en",
-  partnerOnly = false
+  partnerOnly = false,
 ) => {
   const ci = colors.length ? ` ci=${colors.join("")}` : "";
 
@@ -52,12 +59,12 @@ export const buildQuery = (
 
 const fetchRandom = (query: string) =>
   scryfallFetch(
-    `https://api.scryfall.com/cards/random?q=${encodeURIComponent(query)}`
+    `https://api.scryfall.com/cards/random?q=${encodeURIComponent(query)}`,
   );
 
 const fetchOne = async (
   query: string,
-  lang: Lang
+  lang: Lang,
 ): Promise<CommanderCard | null> => {
   if (lang !== "en") {
     const res = await fetchRandom(`${query} lang:${lang}`);
@@ -70,7 +77,7 @@ const fetchOne = async (
 export const getRandomCommander = async (
   colors: string[],
   lang: Lang = "en",
-  partnerOnly = false
+  partnerOnly = false,
 ): Promise<CommanderCard> => {
   let res = await fetchRandom(buildQuery(colors, lang, partnerOnly));
 
@@ -85,7 +92,7 @@ export const getRandomCommander = async (
 
 export const getPartner = async (
   card: CommanderCard,
-  lang: Lang = "en"
+  lang: Lang = "en",
 ): Promise<CommanderCard | null> => {
   const kw = (card.keywords ?? []).map((k) => k.toLowerCase());
   const has = (k: string) => kw.includes(k.toLowerCase());
@@ -97,15 +104,15 @@ export const getPartner = async (
   // 1) « Partner with » : partenaire imposé
   if (has("Partner with")) {
     const part = card.all_parts?.find(
-      (p) => p.component === "combo_piece" && p.name !== card.name
+      (p) => p.component === "combo_piece" && p.name !== card.name,
     );
     if (!part) return null;
 
     if (lang !== "en") {
       const search = await scryfallFetch(
         `https://api.scryfall.com/cards/search?q=${encodeURIComponent(
-          `!"${part.name}" lang:${lang}`
-        )}`
+          `!"${part.name}" lang:${lang}`,
+        )}`,
       );
       if (search.ok) {
         const json = await search.json();
@@ -129,7 +136,7 @@ export const getPartner = async (
   else if (has("Friends forever")) {
     partner = await fetchOne(
       `is:commander keyword:"friends forever" ${notSelf}`,
-      lang
+      lang,
     );
   }
   // 4) « Choose a Background » → un Background (sans is:commander !)
@@ -140,7 +147,7 @@ export const getPartner = async (
   else if (typeLine.includes("Background")) {
     partner = await fetchOne(
       'is:commander keyword:"choose a background"',
-      lang
+      lang,
     );
   }
   // 6) « Doctor's companion » → un Doctor
@@ -151,7 +158,7 @@ export const getPartner = async (
   else if (typeLine.includes("Time Lord Doctor")) {
     partner = await fetchOne(
       'is:commander keyword:"doctor\'s companion"',
-      lang
+      lang,
     );
   }
 
@@ -167,7 +174,7 @@ export const searchCards = async (text: string): Promise<CommanderCard[]> => {
 
   const q = `${clean} (is:commander OR type:background) lang:any`;
   const res = await scryfallFetch(
-    `https://api.scryfall.com/cards/search?q=${encodeURIComponent(q)}&unique=cards`
+    `https://api.scryfall.com/cards/search?q=${encodeURIComponent(q)}&unique=cards`,
   );
   if (!res.ok) return [];
 
@@ -177,10 +184,35 @@ export const searchCards = async (text: string): Promise<CommanderCard[]> => {
 
 // Récupère la fiche complète d'une carte à partir de son nom anglais
 export const getCardByName = async (
-  name: string
+  name: string,
 ): Promise<CommanderCard | null> => {
   const res = await scryfallFetch(
-    `https://api.scryfall.com/cards/named?exact=${encodeURIComponent(name)}`
+    `https://api.scryfall.com/cards/named?exact=${encodeURIComponent(name)}`,
   );
   return res.ok ? await res.json() : null;
+};
+
+// Récupère plusieurs cartes par nom (75 max par requête chez Scryfall)
+export const getCardsByNames = async (
+  names: string[]
+): Promise<CommanderCard[]> => {
+  const found: CommanderCard[] = [];
+
+  for (let i = 0; i < names.length; i += 75) {
+    const chunk = names.slice(i, i + 75);
+    const res = await scryfallFetch(
+      "https://api.scryfall.com/cards/collection",
+      1,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ identifiers: chunk.map((name) => ({ name })) }),
+      }
+    );
+    if (!res.ok) throw new Error("Scryfall n'a pas répondu, réessaie.");
+    const json = await res.json();
+    found.push(...(json.data ?? []));
+  }
+
+  return found;
 };
