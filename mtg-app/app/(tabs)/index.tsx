@@ -46,7 +46,7 @@ const TEXTS = {
     clear: "Effacer",
     draw: "Tirer un commandant",
     noResult: "Aucun commandant trouvé avec ces filtres.",
-    emptyCollection: "Ta collection est vide.",
+    emptyCollection: "Aucun commandant dans ta collection.",
     noMatchCollection:
       "Aucune carte de ta collection ne correspond à ces couleurs.",
   },
@@ -62,7 +62,7 @@ const TEXTS = {
     clear: "Clear",
     draw: "Draw a commander",
     noResult: "No commander found with these filters.",
-    emptyCollection: "Your collection is empty.",
+    emptyCollection: "No commander in your collection.",
     noMatchCollection: "No card in your collection matches these colors.",
   },
 };
@@ -103,7 +103,9 @@ export default function HomeScreen() {
 
       if (collectionOnly) {
         if (!user) return;
-        const all = await getCollection(user.id);
+        const all = (await getCollection(user.id)).filter(
+          (c) => c.commander !== false,
+        );
         if (all.length === 0) {
           setErrorMsg(t.emptyCollection);
           return;

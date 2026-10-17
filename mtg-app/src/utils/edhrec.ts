@@ -10,13 +10,16 @@ const slugify = (name: string) =>
     .trim()
     .replace(/\s+/g, "-");
 
-export const openEdhrec = (card: CommanderCard) => {
+export const openEdhrec = (
+  card: CommanderCard,
+  section?: "commanders" | "cards"
+) => {
   const frontName = card.card_faces?.[0]?.name ?? card.name;
   const slug = slugify(frontName);
 
-  // Les Backgrounds ne sont pas des commandants : page « carte »
+  // Par défaut : page commandant, sauf pour les Backgrounds
   const isBackground = card.type_line?.includes("Background");
-  const section = isBackground ? "cards" : "commanders";
+  const target = section ?? (isBackground ? "cards" : "commanders");
 
-  Linking.openURL(`https://edhrec.com/${section}/${slug}`);
+  Linking.openURL(`https://edhrec.com/${target}/${slug}`);
 };

@@ -4,17 +4,20 @@ import { useFocusEffect } from "expo-router";
 import { useCallback, useState } from "react";
 import {
   ActivityIndicator,
+  Modal,
   Pressable,
   SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from "react-native";
 
 import { DEFAULT_GRADIENT } from "@/src/constants/colors";
 import { useAuth } from "@/src/context/AuthContext";
+import { addDeckToCollection } from "@/src/services/collection";
 import {
   deleteDeck,
   getDecks,
@@ -52,10 +55,12 @@ const LABELS: Record<string, string> = {
   Other: "Autres",
 };
 
+const frontType = (card: CommanderCard) =>
+  card.card_faces?.[0]?.type_line ?? (card.type_line ?? "").split("//")[0];
+
 // On classe selon la FACE AVANT (aventures, cartes à double face...)
 const groupOf = (card: CommanderCard) => {
-  const t =
-    card.card_faces?.[0]?.type_line ?? (card.type_line ?? "").split("//")[0];
+  const t = frontType(card);
   if (t.includes("Land")) return "Land";
   for (const g of [
     "Creature",
@@ -85,10 +90,20 @@ const kindOf = (e: DeckEntry): Board => {
   return e.board;
 };
 
+const edhrecSection = (c: CommanderCard): "commanders" | "cards" => {
+  const t = frontType(c);
+  return t.includes("Legendary") && t.includes("Creature")
+    ? "commanders"
+    : "cards";
+};
+
 const imageHeaders = {
   "User-Agent": "MTG-Deck-App/1.0",
   Accept: "image/*",
 };
+
+const GAP = 8;
+const PAD = 12;
 
 export default function DecksScreen() {
   const { user } = useAuth();
@@ -260,7 +275,19 @@ function DeckDetail({
   onBack: () => void;
   onDelete: () => void;
 }) {
+  const { user } = useAuth();
+  const { width } = useWindowDimensions();
   const [confirming, setConfirming] = useState(false);
+  const [adding, setAdding] = useState(false);
+  const [message, setMessage] = useState("");
+  const [preview, setPreview] = useState<DeckEntry | null>(null);
+
+  // La grille remplit presque toute la largeur, avec une marge sur les côtés
+  const contentW = Math.min(width, 960);
+  const cols = contentW < 520 ? 3 : contentW < 760 ? 4 : 6;
+  const cardW = (contentW - PAD * 2 - GAP * (cols - 1)) / cols;
+  const cardH = (cardW * 680) / 488;
+  const layout = { contentW, cardW, cardH };
 
   const commanders = deck.entries.filter((e) => kindOf(e) === "commander");
   const main = deck.entries.filter((e) => kindOf(e) === "main");
@@ -281,61 +308,151 @@ function DeckDetail({
       .sort((a, b) => a.card.name.localeCompare(b.card.name)),
   })).filter((g) => g.items.length > 0);
 
+  // Tout sauf les jetons
+  const importable = deck.entries.filter((e) => kindOf(e) !== "token");
+  const uniqueCount = new Set(importable.map((e) => e.card.name)).size;
+
+  const addAll = async () => {
+    if (!user) return;
+    try {
+      setAdding(true);
+      const r = await addDeckToCollection(
+        user.id,
+        importable.map((e) => ({
+          card: e.card,
+          quantity: e.quantity,
+          commander: kindOf(e) === "commander",
+        }))
+      );
+      if (r.added === 0 && r.updated === 0) {
+        setMessage("Rien de nouveau : tout est déjà dans ta collection.");
+      } else {
+        setMessage(
+          `${r.added} nouvelle${r.added > 1 ? "s" : ""} carte${
+            r.added > 1 ? "s" : ""
+          } ajoutée${r.added > 1 ? "s" : ""}` +
+            (r.updated ? `, ${r.updated} quantité(s) mise(s) à jour` : "") +
+            ` · ${r.total} cartes dans ta collection`
+        );
+      }
+    } catch (e) {
+      console.error(e);
+      setMessage("Ajout impossible, réessaie.");
+    } finally {
+      setAdding(false);
+    }
+  };
+
   return (
     <LinearGradient colors={gradient} style={{ flex: 1 }}>
       <SafeAreaView style={{ flex: 1 }}>
-        <ScrollView contentContainerStyle={styles.container}>
-          <View style={styles.topBar}>
-            <Pressable onPress={onBack} style={styles.smallBtn}>
-              <Text style={styles.smallBtnText}>← Retour</Text>
-            </Pressable>
-            {confirming ? (
-              <View style={{ flexDirection: "row", gap: 8 }}>
-                <Pressable onPress={onDelete} style={styles.dangerBtn}>
-                  <Text style={styles.dangerText}>Confirmer</Text>
-                </Pressable>
+        <ScrollView contentContainerStyle={styles.detailContainer}>
+          <View style={[styles.header, { width: contentW - PAD * 2 }]}>
+            <View style={styles.topBar}>
+              <Pressable onPress={onBack} style={styles.smallBtn}>
+                <Text style={styles.smallBtnText}>← Retour</Text>
+              </Pressable>
+              {confirming ? (
+                <View style={{ flexDirection: "row", gap: 8 }}>
+                  <Pressable onPress={onDelete} style={styles.dangerBtn}>
+                    <Text style={styles.dangerText}>Confirmer</Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={() => setConfirming(false)}
+                    style={styles.smallBtn}
+                  >
+                    <Text style={styles.smallBtnText}>Annuler</Text>
+                  </Pressable>
+                </View>
+              ) : (
                 <Pressable
-                  onPress={() => setConfirming(false)}
+                  onPress={() => setConfirming(true)}
                   style={styles.smallBtn}
                 >
-                  <Text style={styles.smallBtnText}>Annuler</Text>
+                  <Text style={[styles.smallBtnText, { color: "#7a0000" }]}>
+                    Supprimer
+                  </Text>
                 </Pressable>
-              </View>
-            ) : (
-              <Pressable
-                onPress={() => setConfirming(true)}
-                style={styles.smallBtn}
-              >
-                <Text style={[styles.smallBtnText, { color: "#7a0000" }]}>
-                  Supprimer
+              )}
+            </View>
+
+            <Text style={styles.title}>{deck.name}</Text>
+            <Text style={[styles.subtitle, { textAlign: "center" }]}>
+              {count([...commanders, ...main])} cartes
+            </Text>
+
+            <Pressable
+              onPress={addAll}
+              disabled={adding}
+              style={[styles.addAllBtn, adding && { opacity: 0.7 }]}
+            >
+              {adding ? (
+                <ActivityIndicator color="#111" />
+              ) : (
+                <Text style={styles.addAllText}>
+                  ＋ Ajouter les {uniqueCount} cartes à ma collection
                 </Text>
-              </Pressable>
+              )}
+            </Pressable>
+
+            {message !== "" && (
+              <View style={styles.info}>
+                <Text style={styles.infoText}>{message}</Text>
+              </View>
+            )}
+
+            {deck.notFound.length > 0 && (
+              <View style={styles.warning}>
+                <Text style={styles.warningText}>
+                  Cartes non trouvées : {deck.notFound.join(", ")}
+                </Text>
+              </View>
             )}
           </View>
 
-          <Text style={styles.title}>{deck.name}</Text>
-          <Text style={styles.subtitle}>
-            {count([...commanders, ...main])} cartes
-          </Text>
-
-          {deck.notFound.length > 0 && (
-            <View style={styles.warning}>
-              <Text style={styles.warningText}>
-                Cartes non trouvées : {deck.notFound.join(", ")}
-              </Text>
-            </View>
-          )}
-
           {commanders.length > 0 && (
-            <Section title="Commandant" entries={commanders} link />
+            <Section
+              title="Commandant"
+              entries={commanders}
+              layout={layout}
+              onSelect={setPreview}
+            />
           )}
           {groups.map((g) => (
-            <Section key={g.key} title={LABELS[g.key]} entries={g.items} />
+            <Section
+              key={g.key}
+              title={LABELS[g.key]}
+              entries={g.items}
+              layout={layout}
+              onSelect={setPreview}
+            />
           ))}
-          {side.length > 0 && <Section title="Réserve" entries={side} />}
-          {tokens.length > 0 && <Section title="Jetons" entries={tokens} />}
+          {side.length > 0 && (
+            <Section
+              title="Réserve"
+              entries={side}
+              layout={layout}
+              onSelect={setPreview}
+            />
+          )}
+          {tokens.length > 0 && (
+            <Section
+              title="Jetons"
+              entries={tokens}
+              layout={layout}
+              onSelect={setPreview}
+            />
+          )}
         </ScrollView>
       </SafeAreaView>
+
+      {preview && (
+        <CardPreview
+          key={preview.card.id}
+          entry={preview}
+          onClose={() => setPreview(null)}
+        />
+      )}
     </LinearGradient>
   );
 }
@@ -343,30 +460,34 @@ function DeckDetail({
 function Section({
   title,
   entries,
-  link = false,
+  layout,
+  onSelect,
 }: {
   title: string;
   entries: DeckEntry[];
-  link?: boolean;
+  layout: { contentW: number; cardW: number; cardH: number };
+  onSelect: (e: DeckEntry) => void;
 }) {
   return (
-    <View style={{ width: "100%", alignItems: "center" }}>
+    <View style={{ width: layout.contentW, alignItems: "center" }}>
       <Text style={styles.sectionTitle}>
         {title} ({count(entries)})
       </Text>
-      <View style={styles.grid}>
+      <View style={[styles.grid, { width: layout.contentW - PAD * 2 }]}>
         {entries.map((e) => (
           <Pressable
             key={`${e.board}-${e.card.id}`}
-            onPress={link ? () => openEdhrec(e.card) : undefined}
+            onPress={() => onSelect(e)}
+            style={{ width: layout.cardW }}
           >
             <Image
-              source={{
-                uri: imageOf(e.card),
-                headers: imageHeaders,
+              source={{ uri: imageOf(e.card), headers: imageHeaders }}
+              style={{
+                width: layout.cardW,
+                height: layout.cardH,
+                borderRadius: 6,
               }}
-              style={styles.cardImage}
-              contentFit="contain"
+              contentFit="cover"
             />
             {e.quantity > 1 && (
               <View style={styles.badge}>
@@ -380,10 +501,76 @@ function Section({
   );
 }
 
-const CARD_W = 105;
+function CardPreview({
+  entry,
+  onClose,
+}: {
+  entry: DeckEntry;
+  onClose: () => void;
+}) {
+  const { width } = useWindowDimensions();
+  const [back, setBack] = useState(false);
+
+  const card = entry.card;
+  const isDoubleFaced = card.card_faces?.length === 2;
+  const uri =
+    back && isDoubleFaced
+      ? card.card_faces?.[1]?.image_uris?.normal
+      : imageOf(card);
+
+  const imgW = Math.min(300, width - 80);
+
+  return (
+    <Modal visible transparent animationType="fade" onRequestClose={onClose}>
+      <Pressable style={styles.backdrop} onPress={onClose}>
+        <Pressable style={styles.sheet} onPress={() => {}}>
+          <Image
+            source={{ uri, headers: imageHeaders }}
+            style={{
+              width: imgW,
+              height: (imgW * 680) / 488,
+              borderRadius: 14,
+            }}
+            contentFit="cover"
+          />
+
+          <Text style={styles.sheetName} numberOfLines={2}>
+            {card.name}
+          </Text>
+          <Text style={styles.sheetType} numberOfLines={2}>
+            {card.type_line}
+            {entry.quantity > 1 ? `  ·  ×${entry.quantity}` : ""}
+          </Text>
+
+          {isDoubleFaced && (
+            <Pressable onPress={() => setBack((b) => !b)} style={styles.flipBtn}>
+              <Text style={styles.flipText}>↺ Retourner la carte</Text>
+            </Pressable>
+          )}
+
+          <Pressable
+            onPress={() => openEdhrec(card, edhrecSection(card))}
+            style={styles.sheetBtn}
+          >
+            <Text style={styles.sheetBtnText}>Voir sur EDHREC</Text>
+          </Pressable>
+          <Pressable onPress={onClose}>
+            <Text style={styles.sheetClose}>Fermer</Text>
+          </Pressable>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
 
 const styles = StyleSheet.create({
   container: { alignItems: "center", padding: 20, paddingBottom: 50 },
+  detailContainer: {
+    alignItems: "center",
+    paddingTop: 12,
+    paddingBottom: 60,
+  },
+  header: { alignItems: "center" },
   title: {
     fontSize: 28,
     fontWeight: "800",
@@ -455,7 +642,6 @@ const styles = StyleSheet.create({
 
   topBar: {
     width: "100%",
-    maxWidth: 420,
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
@@ -477,6 +663,27 @@ const styles = StyleSheet.create({
   },
   dangerText: { fontSize: 13, fontWeight: "700", color: "#fff" },
 
+  addAllBtn: {
+    marginTop: 14,
+    width: "100%",
+    maxWidth: 420,
+    paddingVertical: 12,
+    borderRadius: 999,
+    borderWidth: 1.5,
+    borderColor: "#111",
+    backgroundColor: "rgba(255,255,255,0.7)",
+    alignItems: "center",
+  },
+  addAllText: { fontSize: 15, fontWeight: "700", color: "#111" },
+  info: {
+    marginTop: 12,
+    maxWidth: 420,
+    padding: 10,
+    borderRadius: 12,
+    backgroundColor: "rgba(255,255,255,0.6)",
+  },
+  infoText: { fontSize: 13, color: "#111", textAlign: "center" },
+
   warning: {
     marginTop: 14,
     maxWidth: 420,
@@ -496,13 +703,7 @@ const styles = StyleSheet.create({
     marginTop: 12,
     flexDirection: "row",
     flexWrap: "wrap",
-    justifyContent: "center",
-    gap: 10,
-  },
-  cardImage: {
-    width: CARD_W,
-    height: (CARD_W * 340) / 240,
-    borderRadius: 8,
+    gap: GAP,
   },
   badge: {
     position: "absolute",
@@ -510,8 +711,60 @@ const styles = StyleSheet.create({
     right: 4,
     backgroundColor: "#111",
     borderRadius: 999,
-    paddingHorizontal: 8,
+    paddingHorizontal: 7,
     paddingVertical: 2,
   },
-  badgeText: { color: "#fff", fontSize: 12, fontWeight: "700" },
+  badgeText: { color: "#fff", fontSize: 11, fontWeight: "700" },
+
+  backdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.65)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  sheet: {
+    alignItems: "center",
+    backgroundColor: "#fff",
+    borderRadius: 20,
+    padding: 18,
+    width: "90%",
+    maxWidth: 400,
+  },
+  sheetName: {
+    marginTop: 12,
+    fontSize: 17,
+    fontWeight: "800",
+    color: "#111",
+    textAlign: "center",
+  },
+  sheetType: {
+    marginTop: 2,
+    fontSize: 12,
+    color: "rgba(0,0,0,0.6)",
+    textAlign: "center",
+  },
+  flipBtn: {
+    marginTop: 12,
+    paddingVertical: 9,
+    paddingHorizontal: 18,
+    borderRadius: 999,
+    borderWidth: 1.5,
+    borderColor: "#111",
+  },
+  flipText: { fontSize: 13, fontWeight: "700", color: "#111" },
+  sheetBtn: {
+    marginTop: 12,
+    width: "100%",
+    paddingVertical: 12,
+    borderRadius: 999,
+    backgroundColor: "#111",
+    alignItems: "center",
+  },
+  sheetBtnText: { color: "#fff", fontWeight: "700" },
+  sheetClose: {
+    marginTop: 12,
+    fontSize: 14,
+    fontWeight: "600",
+    color: "rgba(0,0,0,0.6)",
+  },
 });
