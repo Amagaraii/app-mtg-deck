@@ -1,6 +1,6 @@
 import { CommanderCard } from "@/src/types/commander";
 
-export type Board = "commander" | "main" | "side";
+export type Board = "commander" | "main" | "side" | "token";
 
 export type DeckEntry = {
   quantity: number;

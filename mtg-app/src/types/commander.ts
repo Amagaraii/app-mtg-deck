@@ -4,6 +4,7 @@ export type CommanderCard = {
   lang?: string;
   set?: string;
   collector_number?: string;
+  layout?: string;
   type_line: string;
   oracle_text?: string;
   color_identity?: string[];
@@ -11,6 +12,7 @@ export type CommanderCard = {
   image_uris?: { normal: string };
   card_faces?: {
     name: string;
+    type_line?: string;
     oracle_text?: string;
     image_uris?: { normal: string };
   }[];

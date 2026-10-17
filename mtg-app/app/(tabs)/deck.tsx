@@ -1,4 +1,4 @@
-
+import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect } from "expo-router";
 import { useCallback, useState } from "react";
@@ -12,13 +12,17 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { Image } from "expo-image";
 
 import { DEFAULT_GRADIENT } from "@/src/constants/colors";
 import { useAuth } from "@/src/context/AuthContext";
-import { deleteDeck, getDecks, importDeck } from "@/src/services/deck";
+import {
+  deleteDeck,
+  getDecks,
+  importDeck,
+  isTokenCard,
+} from "@/src/services/deck";
 import { CommanderCard } from "@/src/types/commander";
-import { Deck, DeckEntry } from "@/src/types/deck";
+import { Board, Deck, DeckEntry } from "@/src/types/deck";
 import { openEdhrec } from "@/src/utils/edhrec";
 import { getGradientColors } from "@/src/utils/gradient";
 
@@ -48,8 +52,10 @@ const LABELS: Record<string, string> = {
   Other: "Autres",
 };
 
-const groupOf = (typeLine = "") => {
-  const t = typeLine.split("//")[0];
+// On classe selon la FACE AVANT (aventures, cartes à double face...)
+const groupOf = (card: CommanderCard) => {
+  const t =
+    card.card_faces?.[0]?.type_line ?? (card.type_line ?? "").split("//")[0];
   if (t.includes("Land")) return "Land";
   for (const g of [
     "Creature",
@@ -70,6 +76,14 @@ const imageOf = (c: CommanderCard) =>
 
 const count = (entries: DeckEntry[]) =>
   entries.reduce((sum, e) => sum + e.quantity, 0);
+
+// Les jetons ont leur propre zone, même dans les anciens decks importés
+const kindOf = (e: DeckEntry): Board => {
+  if (e.board === "commander") return "commander";
+  if (isTokenCard(e.card)) return "token";
+  if (e.board === "token") return "main"; // ancien classement par catégorie
+  return e.board;
+};
 
 const imageHeaders = {
   "User-Agent": "MTG-Deck-App/1.0",
@@ -197,8 +211,12 @@ export default function DecksScreen() {
           )}
 
           {decks.map((d) => {
-            const commander = d.entries.find((e) => e.board === "commander");
-            const total = count(d.entries.filter((e) => e.board !== "side"));
+            const commander = d.entries.find((e) => kindOf(e) === "commander");
+            const total = count(
+              d.entries.filter(
+                (e) => kindOf(e) === "commander" || kindOf(e) === "main"
+              )
+            );
             return (
               <Pressable
                 key={d.id}
@@ -244,9 +262,10 @@ function DeckDetail({
 }) {
   const [confirming, setConfirming] = useState(false);
 
-  const commanders = deck.entries.filter((e) => e.board === "commander");
-  const main = deck.entries.filter((e) => e.board === "main");
-  const side = deck.entries.filter((e) => e.board === "side");
+  const commanders = deck.entries.filter((e) => kindOf(e) === "commander");
+  const main = deck.entries.filter((e) => kindOf(e) === "main");
+  const side = deck.entries.filter((e) => kindOf(e) === "side");
+  const tokens = deck.entries.filter((e) => kindOf(e) === "token");
 
   const colors = [
     ...new Set(commanders.flatMap((e) => e.card.color_identity ?? [])),
@@ -258,7 +277,7 @@ function DeckDetail({
   const groups = ORDER.map((g) => ({
     key: g,
     items: main
-      .filter((e) => groupOf(e.card.type_line) === g)
+      .filter((e) => groupOf(e.card) === g)
       .sort((a, b) => a.card.name.localeCompare(b.card.name)),
   })).filter((g) => g.items.length > 0);
 
@@ -283,7 +302,10 @@ function DeckDetail({
                 </Pressable>
               </View>
             ) : (
-              <Pressable onPress={() => setConfirming(true)} style={styles.smallBtn}>
+              <Pressable
+                onPress={() => setConfirming(true)}
+                style={styles.smallBtn}
+              >
                 <Text style={[styles.smallBtnText, { color: "#7a0000" }]}>
                   Supprimer
                 </Text>
@@ -311,6 +333,7 @@ function DeckDetail({
             <Section key={g.key} title={LABELS[g.key]} entries={g.items} />
           ))}
           {side.length > 0 && <Section title="Réserve" entries={side} />}
+          {tokens.length > 0 && <Section title="Jetons" entries={tokens} />}
         </ScrollView>
       </SafeAreaView>
     </LinearGradient>

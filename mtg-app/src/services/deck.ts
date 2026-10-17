@@ -1,4 +1,4 @@
-import { getCardsByNames } from "@/src/services/scryfall";
+import { getCardFuzzy, getCardsByNames } from "@/src/services/scryfall";
 import { CommanderCard } from "@/src/types/commander";
 import { Board, Deck, DeckEntry } from "@/src/types/deck";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -8,7 +8,14 @@ const key = (userId: string) => `DECKS_${userId}`;
 type ParsedLine = { quantity: number; name: string; board: Board };
 
 const SECTION =
-  /^(?:\/\/\s*)?(commanders?|companion|sideboard|side|maybeboard|mainboard|main|deck)\s*:?\s*$/i;
+  /^(?:\/\/\s*)?(commanders?|companion|sideboard|side|maybeboard|mainboard|main|deck|tokens?)\s*:?\s*$/i;
+
+// Jeton ou emblème : seul le TYPE de la carte décide, jamais une catégorie
+export const isTokenCard = (c: CommanderCard) =>
+  c.layout === "token" ||
+  c.layout === "double_faced_token" ||
+  c.layout === "emblem" ||
+  /\b(Token|Emblem)\b/.test(c.type_line ?? "");
 
 // Transforme le texte collé en liste de { quantité, nom, zone }
 export function parseDeckList(text: string): ParsedLine[] {
@@ -26,12 +33,12 @@ export function parseDeckList(text: string): ParsedLine[] {
         ? "commander"
         : ["sideboard", "side", "maybeboard", "companion"].includes(s)
         ? "side"
-        : "main";
+        : "main"; // « Tokens » n'est qu'un titre : on revient sur le deck
       continue;
     }
     if (line.startsWith("//") || line.startsWith("#")) continue;
 
-    let board = section;
+    let board: Board = section;
     let rest = line;
     const sb = rest.match(/^SB:\s*(.*)$/i);
     if (sb) {
@@ -45,7 +52,7 @@ export function parseDeckList(text: string): ParsedLine[] {
     const quantity = parseInt(m[1], 10);
     let name = m[2];
 
-    // Catégories Archidekt entre crochets : [Commander{top}], [Ramp]...
+    // Catégories Archidekt entre crochets : seules Commander et Sideboard comptent
     const tags = [...name.matchAll(/\[([^\]]*)\]/g)].map((x) => x[1]);
     if (tags.some((t) => /commander/i.test(t))) board = "commander";
     else if (tags.some((t) => /sideboard|maybeboard/i.test(t))) board = "side";
@@ -67,11 +74,13 @@ export function parseDeckList(text: string): ParsedLine[] {
 const slim = (c: CommanderCard): CommanderCard => ({
   id: c.id,
   name: c.name,
+  layout: c.layout,
   type_line: c.type_line,
   color_identity: c.color_identity,
   image_uris: c.image_uris ? { normal: c.image_uris.normal } : undefined,
   card_faces: c.card_faces?.map((f) => ({
     name: f.name,
+    type_line: f.type_line,
     image_uris: f.image_uris ? { normal: f.image_uris.normal } : undefined,
   })),
 });
@@ -92,11 +101,24 @@ export async function importDeck(
   const names = [...new Set(parsed.map((p) => p.name))];
   const found = await getCardsByNames(names);
 
-  // Recherche par nom complet ou par nom de face (cartes double-face)
   const byName = new Map<string, CommanderCard>();
+
+  // 1) Noms complets d'abord : ils ont toujours priorité
+  for (const c of found) byName.set(c.name.toLowerCase(), c);
+
+  // 2) Noms de face (aventures, double face), sans jamais écraser un nom complet
   for (const c of found) {
-    byName.set(c.name.toLowerCase(), c);
-    c.card_faces?.forEach((f) => byName.set(f.name.toLowerCase(), c));
+    c.card_faces?.forEach((f) => {
+      const k = f.name.toLowerCase();
+      if (!byName.has(k)) byName.set(k, c);
+    });
+  }
+
+  // 3) Seconde chance pour les noms encore introuvables
+  const missing = names.filter((n) => !byName.has(n.toLowerCase()));
+  for (const n of missing.slice(0, 20)) {
+    const c = await getCardFuzzy(n);
+    if (c) byName.set(n.toLowerCase(), c);
   }
 
   const merged = new Map<string, DeckEntry>();
@@ -108,10 +130,14 @@ export async function importDeck(
       if (!notFound.includes(p.name)) notFound.push(p.name);
       continue;
     }
-    const k = `${p.board}|${card.id}`;
+    // Un jeton est reconnu à son type, pas à sa catégorie
+    const board: Board =
+      isTokenCard(card) && p.board !== "commander" ? "token" : p.board;
+
+    const k = `${board}|${card.id}`;
     const existing = merged.get(k);
     if (existing) existing.quantity += p.quantity;
-    else merged.set(k, { quantity: p.quantity, board: p.board, card: slim(card) });
+    else merged.set(k, { quantity: p.quantity, board, card: slim(card) });
   }
 
   const entries = [...merged.values()];

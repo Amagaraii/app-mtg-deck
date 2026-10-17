@@ -220,3 +220,13 @@ export const getCardsByNames = async (
 
   return found;
 };
+
+// Recherche approximative (accepte le nom d'une seule face)
+export const getCardFuzzy = async (
+  name: string
+): Promise<CommanderCard | null> => {
+  const res = await scryfallFetch(
+    `https://api.scryfall.com/cards/named?fuzzy=${encodeURIComponent(name)}`
+  );
+  return res.ok ? await res.json() : null;
+};
