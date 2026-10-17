@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/refs */
 import { LinearGradient } from "expo-linear-gradient";
 import { useRef, useState } from "react";
 import {
@@ -14,7 +15,11 @@ import {
 } from "react-native";
 
 import CommanderCardView from "@/src/components/CommanderCardView";
-import { COLORS, DEFAULT_GRADIENT, MANA_FONT_MAP } from "@/src/constants/colors";
+import {
+  COLORS,
+  DEFAULT_GRADIENT,
+  MANA_FONT_MAP,
+} from "@/src/constants/colors";
 import { useAuth } from "@/src/context/AuthContext";
 import { getCollection } from "@/src/services/collection";
 import {
@@ -42,7 +47,8 @@ const TEXTS = {
     draw: "Tirer un commandant",
     noResult: "Aucun commandant trouvé avec ces filtres.",
     emptyCollection: "Ta collection est vide.",
-    noMatchCollection: "Aucune carte de ta collection ne correspond à ces couleurs.",
+    noMatchCollection:
+      "Aucune carte de ta collection ne correspond à ces couleurs.",
   },
   en: {
     title: "Random Commander",
@@ -84,7 +90,7 @@ export default function HomeScreen() {
 
   const toggleColor = (c: string) =>
     setSelectedColors((p) =>
-      p.includes(c) ? p.filter((x) => x !== c) : [...p, c]
+      p.includes(c) ? p.filter((x) => x !== c) : [...p, c],
     );
 
   const handleGetRandomCommander = async () => {
@@ -103,7 +109,9 @@ export default function HomeScreen() {
           return;
         }
         const pool = selectedColors.length
-          ? all.filter((c) => sameColors(c.color_identity ?? [], selectedColors))
+          ? all.filter((c) =>
+              sameColors(c.color_identity ?? [], selectedColors),
+            )
           : all;
         if (pool.length === 0) {
           setErrorMsg(t.noMatchCollection);
@@ -114,7 +122,7 @@ export default function HomeScreen() {
         full =
           shown.keywords !== undefined
             ? shown
-            : (await getCardByName(shown.name)) ?? shown;
+            : ((await getCardByName(shown.name)) ?? shown);
       } else {
         shown = await getRandomCommander(selectedColors, lang, partnerOnly);
         full = shown;
@@ -165,7 +173,10 @@ export default function HomeScreen() {
                   style={[styles.langOption, lang === l && styles.langActive]}
                 >
                   <Text
-                    style={[styles.langText, lang === l && styles.langTextActive]}
+                    style={[
+                      styles.langText,
+                      lang === l && styles.langTextActive,
+                    ]}
                   >
                     {l.toUpperCase()}
                   </Text>
@@ -236,7 +247,9 @@ export default function HomeScreen() {
                       colors={getGradientColors([c])}
                       style={[
                         styles.colorButton,
-                        selected ? styles.colorSelected : styles.colorUnselected,
+                        selected
+                          ? styles.colorSelected
+                          : styles.colorUnselected,
                       ]}
                     >
                       <Pressable
@@ -336,7 +349,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(0,0,0,0.08)",
   },
-  row: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  row: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
   rowRight: { flexDirection: "row", alignItems: "center", gap: 14 },
   label: { fontSize: 16, fontWeight: "700", color: "#111" },
   hint: { fontSize: 12, color: "rgba(0,0,0,0.6)", marginTop: 2 },
@@ -372,7 +389,12 @@ const styles = StyleSheet.create({
   },
   drawText: { color: "#fff", fontSize: 17, fontWeight: "700" },
 
-  errorText: { marginTop: 16, fontSize: 15, color: "#7a0000", textAlign: "center" },
+  errorText: {
+    marginTop: 16,
+    fontSize: 15,
+    color: "#7a0000",
+    textAlign: "center",
+  },
 
   cardsRow: {
     marginTop: 28,

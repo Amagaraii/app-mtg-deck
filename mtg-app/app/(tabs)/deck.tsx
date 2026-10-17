@@ -1,9 +1,9 @@
+
 import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect } from "expo-router";
 import { useCallback, useState } from "react";
 import {
   ActivityIndicator,
-  Image,
   Pressable,
   SafeAreaView,
   ScrollView,
@@ -12,6 +12,7 @@ import {
   TextInput,
   View,
 } from "react-native";
+import { Image } from "expo-image";
 
 import { DEFAULT_GRADIENT } from "@/src/constants/colors";
 import { useAuth } from "@/src/context/AuthContext";
@@ -69,6 +70,11 @@ const imageOf = (c: CommanderCard) =>
 
 const count = (entries: DeckEntry[]) =>
   entries.reduce((sum, e) => sum + e.quantity, 0);
+
+const imageHeaders = {
+  "User-Agent": "MTG-Deck-App/1.0",
+  Accept: "image/*",
+};
 
 export default function DecksScreen() {
   const { user } = useAuth();
@@ -201,8 +207,12 @@ export default function DecksScreen() {
               >
                 {commander ? (
                   <Image
-                    source={{ uri: imageOf(commander.card) }}
+                    source={{
+                      uri: imageOf(commander.card),
+                      headers: imageHeaders,
+                    }}
                     style={styles.thumb}
+                    contentFit="cover"
                   />
                 ) : (
                   <View style={[styles.thumb, styles.thumbEmpty]} />
@@ -327,7 +337,14 @@ function Section({
             key={`${e.board}-${e.card.id}`}
             onPress={link ? () => openEdhrec(e.card) : undefined}
           >
-            <Image source={{ uri: imageOf(e.card) }} style={styles.cardImage} />
+            <Image
+              source={{
+                uri: imageOf(e.card),
+                headers: imageHeaders,
+              }}
+              style={styles.cardImage}
+              contentFit="contain"
+            />
             {e.quantity > 1 && (
               <View style={styles.badge}>
                 <Text style={styles.badgeText}>×{e.quantity}</Text>
@@ -407,7 +424,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(0,0,0,0.08)",
   },
-  thumb: { width: 56, height: 78, borderRadius: 6, resizeMode: "cover" },
+  thumb: { width: 56, height: 78, borderRadius: 6 },
   thumbEmpty: { backgroundColor: "rgba(0,0,0,0.15)" },
   deckName: { fontSize: 16, fontWeight: "700", color: "#111" },
   deckMeta: { fontSize: 13, color: "rgba(0,0,0,0.6)", marginTop: 2 },
@@ -462,7 +479,6 @@ const styles = StyleSheet.create({
   cardImage: {
     width: CARD_W,
     height: (CARD_W * 340) / 240,
-    resizeMode: "contain",
     borderRadius: 8,
   },
   badge: {

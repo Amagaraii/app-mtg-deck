@@ -18,7 +18,11 @@ const scryfallFetch = async (
   try {
     const res = await fetch(url, {
       ...init,
-      headers: { Accept: "application/json", ...(init?.headers ?? {}) },
+      headers: {
+        Accept: "application/json",
+        "User-Agent": "MTG-Deck-App/1.0",
+        ...(init?.headers ?? {}),
+      },
     });
     if (res.status === 429 && retries > 0) {
       await sleep(3000);

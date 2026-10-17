@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
-import { Animated, Image, Pressable, StyleSheet, Text, View } from "react-native";
+import { Animated, Pressable, StyleSheet, Text, View } from "react-native";
+import { Image } from "expo-image";
 
 import { CommanderCard } from "@/src/types/commander";
 import { openEdhrec } from "@/src/utils/edhrec";
@@ -30,14 +31,22 @@ export default function CommanderCardView({
     }).start(() => setIsFlipped(!isFlipped));
   };
 
-  const frontRotate = flipAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: ["0deg", "180deg"],
-  });
-  const backRotate = flipAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: ["180deg", "360deg"],
-  });
+  // eslint-disable-next-line react-hooks/refs
+const frontRotate = flipAnim.interpolate({
+  inputRange: [0, 1],
+  outputRange: ["0deg", "180deg"],
+});
+
+// eslint-disable-next-line react-hooks/refs
+const backRotate = flipAnim.interpolate({
+  inputRange: [0, 1],
+  outputRange: ["180deg", "360deg"],
+});
+
+  const imageHeaders = {
+    "User-Agent": "MTG-Deck-App/1.0",
+    Accept: "image/*",
+  };
 
   return (
     <View style={styles.wrapper}>
@@ -51,7 +60,9 @@ export default function CommanderCardView({
                 uri:
                   card.image_uris?.normal ??
                   card.card_faces?.[0]?.image_uris?.normal,
+                headers: imageHeaders,
               }}
+              contentFit="contain"
               style={styles.image}
             />
           </Animated.View>
@@ -61,7 +72,11 @@ export default function CommanderCardView({
               style={[styles.cardFace, { transform: [{ rotateY: backRotate }] }]}
             >
               <Image
-                source={{ uri: card.card_faces?.[1]?.image_uris?.normal }}
+                source={{
+                  uri: card.card_faces?.[1]?.image_uris?.normal,
+                  headers: imageHeaders,
+                }}
+                contentFit="contain"
                 style={styles.image}
               />
             </Animated.View>
@@ -97,7 +112,7 @@ const styles = StyleSheet.create({
     height: "100%",
     backfaceVisibility: "hidden",
   },
-  image: { width: "100%", height: "100%", resizeMode: "contain", borderRadius: 16 },
+  image: { width: "100%", height: "100%", borderRadius: 16 },
   flipButton: {
     marginTop: 10,
     width: 40,
